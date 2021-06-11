@@ -2393,10 +2393,17 @@ namespace Steeltoe.Messaging.RabbitMQ.Core
 
         private Connection.IConnectionFactory ObtainTargetConnectionFactory(IExpression expression, object rootObject)
         {
-            if (expression != null && ConnectionFactory is AbstractRoutingConnectionFactory)
+            if (ConnectionFactory is AbstractRoutingConnectionFactory)
             {
                 var routingConnectionFactory = (AbstractRoutingConnectionFactory)ConnectionFactory;
+
+                if (expression is null)
+                {
+                    return routingConnectionFactory.DetermineTargetConnectionFactory();
+                }
+
                 object lookupKey;
+
                 if (rootObject != null)
                 {
                     lookupKey = SendConnectionFactorySelectorExpression.GetValue(EvaluationContext, rootObject);
@@ -2409,6 +2416,7 @@ namespace Steeltoe.Messaging.RabbitMQ.Core
                 if (lookupKey != null)
                 {
                     var connectionFactory = routingConnectionFactory.GetTargetConnectionFactory(lookupKey);
+
                     if (connectionFactory != null)
                     {
                         return connectionFactory;

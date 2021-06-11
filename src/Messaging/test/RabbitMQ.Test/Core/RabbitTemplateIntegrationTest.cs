@@ -852,6 +852,45 @@ namespace Steeltoe.Messaging.RabbitMQ.Core
         }
 
         [Fact]
+        public void TestSendAndReceiveShouldBindToRoutingConnectionFactoriesWithSimpleResourceHolder()
+        {
+            // arrange
+            static Mock<RC.IModel> SetupMocks(Mock<IConnectionFactory> cf)
+            {
+                var connection = new Mock<Connection.IConnection>();
+                var channel = new Mock<RC.IModel>();
+                cf.Setup(f => f.CreateConnection()).Returns(connection.Object);
+                connection.Setup(c => c.CreateChannel(false)).Returns(channel.Object);
+                connection.Setup(c => c.IsOpen).Returns(true);
+                channel.Setup(c => c.IsOpen).Returns(true);
+                channel.Setup(c => c.CreateBasicProperties()).Returns(new MockRabbitBasicProperties());
+                channel.Setup((c) => c.QueueDeclarePassive(Address.AMQ_RABBITMQ_REPLY_TO))
+                    .Returns(() => new RC.QueueDeclareOk(Address.AMQ_RABBITMQ_REPLY_TO, 0, 0));
+                return channel;
+            }
+
+            var channel1 = SetupMocks(cf1);
+            var channel2 = SetupMocks(cf2);
+
+            // act(a): send message using connection factory 1
+            SimpleResourceHolder.Bind(routingTemplate.ConnectionFactory, "foo");
+            routingTemplate.ConvertSendAndReceive<string>("exchange", "foo", "abc");
+            SimpleResourceHolder.UnbindIfPossible(routingTemplate.ConnectionFactory);
+
+            // act(b): send message using connection factory 2
+            SimpleResourceHolder.Bind(routingTemplate.ConnectionFactory, "bar");
+            routingTemplate.ConvertSendAndReceive<string>("exchange", "bar", "xyz");
+            SimpleResourceHolder.UnbindIfPossible(routingTemplate.ConnectionFactory);
+
+            // assert: both connection factories should be used
+            cf1.Verify(cf => cf.CreateConnection(), Times.AtLeastOnce);
+            channel1.Verify(c => c.BasicPublish(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<bool>(), It.IsAny<RC.IBasicProperties>(), It.IsAny<byte[]>()));
+
+            cf2.Verify(cf => cf.CreateConnection(), Times.AtLeastOnce);
+            channel2.Verify(c => c.BasicPublish(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<bool>(), It.IsAny<RC.IBasicProperties>(), It.IsAny<byte[]>()));
+        }
+
+        [Fact]
         public void TtestReceiveAndReplyNonStandardCorrelationNotBytes()
         {
             template.DefaultReceiveQueue = ROUTE;
